@@ -42,11 +42,13 @@ for (i in 1:52){
   }
 }
 
-### scrivo tutto su un csv e applico un filtro da libreoffice
-### poi salvo la selezione in un nuono file .csv (riga sotto)
+### write the result on a csv file
+### in a separte file, we filter the catchements on the basis of distance and areas  
+
 write.csv(comb.matrix,"Code_D_Area_list.csv",row.names = FALSE)
 
-### stampa mappe con sfondo google maps
+### print on a background googls map EHYPE and obs catchements 
+
 pairs<-read.csv("Code_D_Area_selected.csv")
 the_map<-list()
 for (i in 1:dim(pairs)[1]){
