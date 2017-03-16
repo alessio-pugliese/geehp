@@ -7,12 +7,12 @@ source('resample_FDC.r')
 source('boxplot_w_negatives_logy.R')
 source('lseq.R')
 ##### packages 
-require(rtop)
-require(maptools)
-require(rgdal)
-require(pracma)
-require(nortest)
-require(rgeos)
+library(rtop)
+library(maptools)
+library(rgdal)
+library(pracma)
+library(nortest)
+library(rgeos)
 #### Load shp files layer for Top-kriging 
 observations <- readOGR("shp","tyrol")
 #predictionLocations <- readOGR("Dataset_Tyrol", "eHYPE_subbasin_TYROL")
@@ -73,7 +73,7 @@ for (i in 1:length(cod)){
 #############################################
 ###### FDCs plot
 plot(FDC$d[[1]],FDC$Q[[1]]/mean(FDC$Q[[1]]), type="l",log="y",ylim=c(0.001,100),xlim=c(0,1),
-     xlab="Duration [-]", ylab="Dimensionless streamflow [m3/s]",col="gray60",axes=FALSE)
+     xlab="Duration [-]", ylab="Dimensionless streamflow [-]",col="gray60",axes=FALSE)
 axis(1,at=seq(0,1,0.1),labels = paste(seq(0,1,0.1)))
 axis(2,at=lseq(0.01,100,5),labels = paste(lseq(0.01,100,5)))
 for (i in 2:length(cod)){
@@ -111,17 +111,12 @@ for (i in 1:length(cod)){
 }
 ###### Hypotheses test for normality of TNDs
 ad.test(TND)
-hist(TND,freq=FALSE,ylim=c(0,1),xlim=c(1,4.5))
+hist(TND,freq=FALSE,ylim=c(0,1.2),xlim=c(1,4.5))
 lines(density(TND))
 curve(dnorm(x,mean=mean(TND),sd=sd(TND)),add=TRUE,col="red")
 qqnorm(TND)
 qqline(TND)
 
-hist((TND-mean(TND))/sd(TND),freq=FALSE)
-lines(density((TND-mean(TND))/sd(TND)))
-curve(dnorm,from=-4,to=4,add=TRUE,col="red")
-qqnorm((TND-mean(TND))/sd(TND))
-qqline((TND-mean(TND))/sd(TND))
 ###########################################
 
 #### Top-kriging TND through LOOCV
@@ -131,7 +126,7 @@ observations$obs<-TND
 vic<-6
 rtopObj<-createRtopObject(observations, observations,
                           formulaString = obs~1,
-                          params = list(gDist = TRUE, rresol = 500,wlim=1,
+                          params = list(gDist = TRUE, rresol = 500,wlim=1,debug.level=0,
                                         nmax=vic))
 
 rtopObj <- rtopVariogram(rtopObj) #crea l'oggetto variogramma
@@ -155,7 +150,7 @@ title(paste("LOOCV TNDTK vic=",vic,sep=""))
 observations$obs<-MAF/(A^c2)
 rtopObj.MAF<-createRtopObject(observations, observations,
                               formulaString = obs~1,
-                              params = list(gDist = TRUE, rresol = 500,
+                              params = list(gDist = TRUE, rresol = 500,debug.level=0,
                                             nmax=vic))
 rtopObj.MAF <- rtopVariogram(rtopObj.MAF)
 rtopObj.MAF <- rtopFitVariogram(rtopObj.MAF)
@@ -227,8 +222,8 @@ for (i in 1:np){
 }
 
 def.par <- par(no.readonly = TRUE) # save default, for resetting...
-layout(mat=matrix(c(1,2,3,3),2,2,byrow=TRUE),widths=c(8,4),heights = c(5,5))
-par(mar=c(5,4,4,2),oma=c(3,3,3,3),mgp=c(2.5,0.75,0))
+layout(mat=matrix(c(1,1,2,3),2,2,byrow=TRUE),widths=c(3,7),heights = c(8,4))
+par(mar=c(3.5,4,2,1),oma=c(1.5,0,3,0),mgp=c(2.5,0.75,0))
 plot(Y,EST,log="xy",xlim=c(0.01,1500),ylim=c(0.01,1500),cex=0.7,pch=19,
      xlab=expression("Empirical streamflow [m"^3*"/s]"),ylab=expression("Predicted streamflow [m"^3*"/s]"),
      xaxt="n",yaxt="n")
@@ -245,8 +240,8 @@ boxplot.w.neg.logy(NSE.matrix,ymin=-5,boxwex=c(0.5,0.5),ylab="Nash-Sutcliffe Eff
 plot(sam,NSE.FDC.duration,type="l",lwd=3,ylim=c(0.5,1),xlab="Duration [-]",ylab = "Nash-Sutcliffe Efficiencies [-]")
 lines(sam,LNSE.FDC.duration,lty="dashed",lwd=3)
 legend(x="bottomleft",legend=c("NSE","LNSE"),
-       lty=c(1,2),lwd=c(3,3),cex=0.8,seg.len = 6,
-       bty = "n",y.intersp = 0.05)
+       lty=c(1,2),lwd=c(3,3),seg.len = 6,
+       bty = "n",y.intersp = 1)
 
 mtext(paste("Number of gauged catchments = ",nt.length+st.length,sep=""),side=3,line = 1,outer=TRUE,cex=1.5)
 
