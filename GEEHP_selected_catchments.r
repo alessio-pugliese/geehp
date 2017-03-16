@@ -1,17 +1,17 @@
-source('GEEHP_FDCs_LOOCV.R')
+#source('GEEHP_FDCs_LOOCV.R')
 source("extract_series.r")
-#library(chron)
 library(zoo)
 library(parallel)
+
+##### Load streamflow data and catchment boundaries
 set.seed(1)
-
 predictionLocations <- readOGR("shp","tyrol_ehype")
-
-# Q.ehype.tutti<-fread(input="~/Documents/Lavoro/ricerca/SWITCH-ON/Dataset_Tyrol/eHYPE_simulation/DischargeEHYPEv3.txt",
-#                             header=TRUE,nrows = 10)
-load("Q.tyrol.RData") # caricamento dati di EHYPE
+load("Q.tyrol.RData") 
 selected.catchments<-read.csv("Code_D_Area_selected_wo_removed.csv")
 
+
+#######  Varaibles initialization 
+#######
 ID.ehype<-selected.catchments$EHYPE
 l<-length(ID.ehype)
 pos.ID.ehype<-c()
@@ -22,9 +22,8 @@ ehype.FDC<-matrix(NA,nrow=np,ncol=l)
 ehype.MAF<-c()
 A.ehype<-c()
 
-#nr_cores=detectCores()-1
-#rtopCluster(nclus=nr_cores,action = "start")  
-
+######   Top-kriging procedure for FDCs predictions at selected catchements
+######
 for (i in 1:l){
   print(paste("loop cycle no=",i))
   pos.ID.ehype[i]<-which(predictionLocations$macroid1==ID.ehype[i])
@@ -32,73 +31,58 @@ for (i in 1:l){
   
   ehype.catchments<-predictionLocations
   obs.to.ehype<-observations[-pos.ID.obs[i],]
-# ehype.FDC<-matrix(NA,nrow=np,ncol=l)
-# ehype.MAF<-c()
-# #ehype.TND<-c()
-# colnames(ehype.FDC)<-ID.ehype
-# rownames(ehype.FDC)<-paste(round(sam,digits=4))
-# j<-1
-# for   (i in pos.ID.ehype){
-#   print(i)
-#   dummy<-sort(Q.ehype.tyrol[,i],decreasing = TRUE)
-#   ehype.MAF[i]<-mean(dummy)
-#   resamp<-resample.FDC(dummy,sam=sam,norm=FALSE)
-#   ehype.FDC[,j]<-resamp$y
-#   #ehype.TND[i]<-fdc.tnd(dummy,norm=TRUE,maxd=tyrol$maxd,log=FALSE)
-#   j<-j+1
-# }
-
-##### dimensionless FDC prediction at ehype locations
-obs.to.ehype$obs<-TND[-pos.ID.obs[i]]
-tyrolRtopObj.FDC<-createRtopObject(obs.to.ehype,ehype.catchments[1:1000,],
+  obs.to.ehype$obs<-TND[-pos.ID.obs[i]]
+  tyrolRtopObj.FDC<-createRtopObject(obs.to.ehype,ehype.catchments,
                                    formulaString = obs~1,
-                                   params = list(gDist = TRUE,
+                                   params = list(gDist = TRUE,debug.level=0,
                                                  rresol = 500,
                                                  nmax=vic,
                                                  #nclus=nr_cores,
                                                  wlim=1,
-                                                 partialOverlap=TRUE)
-                                                )
+                                                 partialOverlap=TRUE
+                                                 ))
+  
+                                              
 
-tyrolRtopObj.FDC<- rtopVariogram(tyrolRtopObj.FDC)
-#tyrolRtopObj.FDC<- checkVario(tyrolRtopObj.FDC, cloud = TRUE, identify = TRUE,
-#                              acor = 0.01,log="")
-tyrolRtopObj.FDC<- rtopKrige(tyrolRtopObj.FDC,wret=TRUE)
+  tyrolRtopObj.FDC<- rtopVariogram(tyrolRtopObj.FDC)
+  tyrolRtopObj.FDC<- rtopFitVariogram(tyrolRtopObj.FDC)
+  #tyrolRtopObj.FDC<- checkVario(tyrolRtopObj.FDC, cloud = TRUE, identify = TRUE,
+  #                              acor = 0.01,log="")
+  tyrolRtopObj.FDC<- rtopKrige(tyrolRtopObj.FDC,wret=TRUE)
 
-weights.obs.to.ehype<-tyrolRtopObj.FDC$weight[pos.ID.ehype[i],]
+  weights.obs.to.ehype<-tyrolRtopObj.FDC$weight[pos.ID.ehype[i],]
+  
+  #est.dimless.FDC<-t(weights.obs.to.ehype)%*%t(y[,-pos.ID.obs[i]])
+  est.dimless.FDC<-as.vector(y[,-pos.ID.obs[i]]%*%(weights.obs.to.ehype))
 
-#est.dimless.FDC<-t(weights.obs.to.ehype)%*%t(y[,-pos.ID.obs[i]])
-est.dimless.FDC<-as.vector(y[,-pos.ID.obs[i]]%*%(weights.obs.to.ehype))
-
-##### MAF prediction at ehype locations
-A.ehype[i]<-as.numeric(gArea(ehype.catchments[pos.ID.ehype[i],],byid=TRUE)/(1000*1000))
-# A.obs<-as.numeric(gArea(observations,byid=TRUE)/(1000*1000))
-# A.obs<-A.obs[pos.ID.obs]
-obs.to.ehype$obs.MAF<-MAF[-pos.ID.obs[i]]/(A[-pos.ID.obs[i]]^c2)
-tyrolRtopObj.MAF<-createRtopObject(obs.to.ehype,ehype.catchments,
+  ##### MAF prediction at ehype locations
+  A.ehype[i]<-as.numeric(gArea(ehype.catchments[pos.ID.ehype[i],],byid=TRUE)/(1000*1000))
+  # A.obs<-as.numeric(gArea(observations,byid=TRUE)/(1000*1000))
+  # A.obs<-A.obs[pos.ID.obs]
+  obs.to.ehype$obs.MAF<-MAF[-pos.ID.obs[i]]/(A[-pos.ID.obs[i]]^c2)
+  tyrolRtopObj.MAF<-createRtopObject(obs.to.ehype,ehype.catchments,
                                    formulaString = obs.MAF~1,
-                                   params = list(gDist = TRUE,
+                                   params = list(gDist = TRUE,debug.level=0,
                                                  rresol = 500,
                                                  #nclus=nr_cores,
                                                  partialOverlap=TRUE,
                                                  nmax=vic)
                                    )
 
-tyrolRtopObj.MAF<- rtopVariogram(tyrolRtopObj.MAF)
-tyrolRtopObj.MAF<- rtopFitVariogram(tyrolRtopObj.MAF)
-#tyrolRtopObj.MAF<- checkVario(tyrolRtopObj.MAF, cloud = TRUE, identify = TRUE,
-#                              acor = 0.01,log="")
-tyrolRtopObj.MAF<- rtopKrige(tyrolRtopObj.MAF)
-pred.MAF<-tyrolRtopObj.MAF$predictions$var1.pred[pos.ID.ehype[i]]*(A.ehype[i]^c2)
+  tyrolRtopObj.MAF<- rtopVariogram(tyrolRtopObj.MAF)
+  tyrolRtopObj.MAF<- rtopFitVariogram(tyrolRtopObj.MAF)
+  #tyrolRtopObj.MAF<- checkVario(tyrolRtopObj.MAF, cloud = TRUE, identify = TRUE,
+  #                              acor = 0.01,log="")
+  tyrolRtopObj.MAF<- rtopKrige(tyrolRtopObj.MAF)
+  pred.MAF<-tyrolRtopObj.MAF$predictions$var1.pred[pos.ID.ehype[i]]*(A.ehype[i]^c2)
 
-#### storing the result of FDC prediction in a matrix
+  #### storing the result of FDC prediction in a matrix
 est.FDC[,i]<-est.dimless.FDC*pred.MAF
 }
 
-#rtopCluster(action = "stop")
 #######################################################################################
 #######################################################################################
-##### estrazione delle serie di portata
+##### Time series manipulation and preparation
 A.obs<-as.numeric(gArea(observations,byid=TRUE)/(1000*1000))
 A.obs<-A.obs[pos.ID.obs]
 streamflow.series<-list()
@@ -131,8 +115,8 @@ for (j in 1:l){
   
 }
 
-#### assimilation algorithm
-#complete.ehype.FDC<-matrix(NA,nrow= ,ncol = l)
+###### assimilation algorithm - povides corrected EHYPE series
+######
 EHYPE.streamflow.series.corrected<-list()
 EHYPE.streamflow.series.cut<-list()
 for (j in 1:l){
@@ -172,28 +156,10 @@ for (j in 1:l){
                                                      Q=corrected.series)
   print(j)
 }
-
-for (j in 1:l){
-  plot(streamflow.series[[j]],type="l",xlab="Days",ylab=expression("Streamflow [m"^3*"/s]"))
-  lines(EHYPE.streamflow.series.cut[[j]],col="red")
-  lines(EHYPE.streamflow.series.corrected[[j]],col="blue")
-  title(paste("ID.obs =",cod[pos.ID.obs[j]],"-","ID.ehype =",ID.ehype[j]))
-  png(filename = paste("./pics/comparison_pair_",j,".png",sep=""),
-      width = 550, height = 550)
-  plot(streamflow.series[[j]]$Q,EHYPE.streamflow.series.cut[[j]]$Q,col="red",
-       xlab=expression("Observed streamflow [m"^3*"/s]"),
-       ylab=expression("Predicted streamflow [m"^3*"/s]"),
-       pch=19,cex=0.5,log="xy",asp=1)
-  points(streamflow.series[[j]]$Q,EHYPE.streamflow.series.corrected[[j]]$Q,
-         col="blue",pch=19,cex=0.5,log="xy")
-  title(paste("ID.obs =",cod[pos.ID.obs[j]],"-","ID.ehype =",ID.ehype[j],"\n",
-              "LNSE.EHYPE = ", round(LNSE.global.EHYPE[j],3),"\n",
-              "LNSE.EHYPE.corrected = ", round(LNSE.global.EHYPE.corrected[j],3)))
-  abline(0,1)
-  dev.off()
-}
-
 #############################################################################
+#############################################################################
+##### Performances analsysis and diagnostics
+
 NSE.global.EHYPE<-c()
 NSE.global.EHYPE.corrected<-c()
 
@@ -224,6 +190,8 @@ abline(h=mean(NSE.global.EHYPE),col="red",lty="dashed")
 abline(h=mean(NSE.global.EHYPE.corrected),col="blue",lty="dashed")
 title(paste("Avg. NSE ehype =", round(mean(NSE.global.EHYPE),3),"\n",
             "Avg. NSE ehype corrected =", round(mean(NSE.global.EHYPE.corrected),3)))
+legend(x="bottomleft",legend = c("EHYPE","cEHYPE","Avg.NSE-EHYPE","Avg.NSE-cEHYPE"),pch=c(1,1,NA,NA),
+       lty = c(NA,NA,"dashed","dashed"),col=c("red","blue","red","blue"))
 box()
 ########################################################################
 # LNSE
@@ -273,9 +241,34 @@ abline(h=mean(LNSE.global.EHYPE),col="red",lty="dashed")
 abline(h=mean(LNSE.global.EHYPE.corrected),col="blue",lty="dashed")
 title(paste("Avg. LNSE ehype =", round(mean(LNSE.global.EHYPE),3),"\n",
             "Avg. LNSE ehype corrected =", round(mean(LNSE.global.EHYPE.corrected),3)))
+legend(x="bottomleft",legend = c("EHYPE","cEHYPE","Avg.LNSE-EHYPE","Avg.LNSE-cEHYPE"),pch=c(1,1,NA,NA),
+       lty = c(NA,NA,"dashed","dashed"),col=c("red","blue","red","blue"))
+
 box()
 
 #save.image(file="GEEHP_final_results.RData")
+##### plot simulated vs. corrected vs. observed streamflow series 
+for (j in 1:l){
+  plot(streamflow.series[[j]],type="l",xlab="Days",ylab=expression("Streamflow [m"^3*"/s]"))
+  lines(EHYPE.streamflow.series.cut[[j]],col="red")
+  lines(EHYPE.streamflow.series.corrected[[j]],col="blue")
+  title(paste("ID.obs =",cod[pos.ID.obs[j]],"-","ID.ehype =",ID.ehype[j]))
+  png(filename = paste("./pics/comparison_pair_",j,".png",sep=""),
+      width = 550, height = 550)
+  plot(streamflow.series[[j]]$Q,EHYPE.streamflow.series.cut[[j]]$Q,col="red",
+       xlab=expression("Observed streamflow [m"^3*"/s]"),
+       ylab=expression("Predicted streamflow [m"^3*"/s]"),
+       pch=19,cex=0.5,log="xy",asp=1)
+  points(streamflow.series[[j]]$Q,EHYPE.streamflow.series.corrected[[j]]$Q,
+         col="blue",pch=19,cex=0.5,log="xy")
+  title(paste("ID.obs =",cod[pos.ID.obs[j]],"-","ID.ehype =",ID.ehype[j],"\n",
+              "LNSE.EHYPE = ", round(LNSE.global.EHYPE[j],3),"\n",
+              "LNSE.EHYPE.corrected = ", round(LNSE.global.EHYPE.corrected[j],3)))
+  abline(0,1)
+  dev.off()
+}
+
+######### year-to-year comparison with focus onto the site with best improvement 
 NSE.year.EHYPE<-list()
 NSE.year.EHYPE.corrected<-list()
 LNSE.year.EHYPE<-list()
@@ -293,11 +286,13 @@ for (j in 1:l){
     EHYPE.corrected.streamflow.per.year<-EHYPE.streamflow.series.corrected[[j]]$Q[pos.series.per.year]
     dummy.1[i]<-1-sum((obs.streamflow.per.year-EHYPE.streamflow.per.year)^2)/sum((obs.streamflow.per.year-mean(obs.streamflow.per.year))^2)
     dummy.2[i]<-1-sum((obs.streamflow.per.year-EHYPE.corrected.streamflow.per.year)^2)/sum((obs.streamflow.per.year-mean(obs.streamflow.per.year))^2)
-  if (j==8){
+  if (j==8){ ##### site with best improvement 
     plot(streamflow.series[[j]][pos.series.per.year,],type="l",ylim=c(0,max(EHYPE.streamflow.series.cut[[j]]$Q)))
     lines(EHYPE.streamflow.series.cut[[j]][pos.series.per.year,],col="red")
     lines(EHYPE.streamflow.series.corrected[[j]][pos.series.per.year,],col="blue")
     legend(x="topleft",legend = paste("yr. =",anni[i],"NSE EHYPE =",round(dummy.1[i],3),"NSE cEHYPE =",round(dummy.2[i],3)),cex=0.75)
+    title(paste("ID.obs =",cod[pos.ID.obs[j]],"-","ID.ehype =",ID.ehype[j]))
+    
     }
   }
   NSE.year.EHYPE[[j]]<-dummy.1
